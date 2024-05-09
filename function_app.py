@@ -3,7 +3,7 @@ import logging
 import azure.functions as func
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
-from openai import AzureOpenAI
+from openai import AsyncAzureOpenAI # Import the Async client for async/await support
 
 # Azure Application Insights setup
 from azure.monitor.opentelemetry import configure_azure_monitor
@@ -13,8 +13,9 @@ from opentelemetry.propagate import extract
 configure_azure_monitor() # Be sure that APPINSIGHTS_INSTRUMENTATIONKEY is configured in environment variables or this call will fail
 
 # Azure OpenAI setup.  Be sure that AZURE_OPENAI_API_KEY is configured in environment variables or this call will fail
+# //TODO: Migrate from API Key to Managed Identity
 deployment_id = os.environ["AZURE_OPENAI_DEPLOYMENT_ID"]
-aoaiClient = AzureOpenAI(
+aoaiClient = AsyncAzureOpenAI(
     api_version = "2024-02-15-preview",
     azure_endpoint = os.environ["AZURE_OPENAI_API_URI"],
     azure_deployment = deployment_id
@@ -25,6 +26,7 @@ kvSecretClient = SecretClient(vault_url=os.environ["KEY_VAULT_URI"], credential=
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
+#TODO: Implement function level API key for callers to use
 @app.route(route="chat")
 async def chat(req: func.HttpRequest, context) -> func.HttpResponse:
     
@@ -36,7 +38,7 @@ async def chat(req: func.HttpRequest, context) -> func.HttpResponse:
     
     # Create a new Open Telemetry span with the incoming trace context
     tracer = trace.get_tracer(__name__)
-    with tracer.start_as_current_span("chat", context=extract(carrier)): # span name matches the function name
+    with tracer.start_as_current_span("chat", context = extract(carrier)): # span name matches the function name
         try:
             logging.info('Chat API called')
             
@@ -53,12 +55,12 @@ async def chat(req: func.HttpRequest, context) -> func.HttpResponse:
                 else:
                     question = req_body.get('question')
                     
-            if question:
-            
+            #TODO: Layer in message history here
+            if question:            
                 messages = [
                         {
                             "role": "system",
-                            "content": "Hello! I'm an AI assistant that helps people find information. How can I help you today?"
+                            "content": "You are an AI assistant that helps people find information."
                         },
                         {
                             "role": "user",
@@ -96,7 +98,7 @@ async def chat(req: func.HttpRequest, context) -> func.HttpResponse:
                     }
                 }
                 
-                completion = aoaiClient.chat.completions.create(**model_args)
+                completion = await aoaiClient.chat.completions.create(**model_args)
                 
                 if(len(completion.choices) > 0):
                     answer = completion.choices[0].message.content
