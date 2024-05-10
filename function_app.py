@@ -1,8 +1,8 @@
 import os
 import logging
 import azure.functions as func
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
+from azure.identity.aio import DefaultAzureCredential
+from azure.keyvault.secrets.aio import SecretClient
 from openai import AsyncAzureOpenAI # Import the Async client for async/await support
 
 # Azure Application Insights setup
@@ -121,4 +121,5 @@ async def chat(req: func.HttpRequest, context) -> func.HttpResponse:
         
     
 async def getKeyVaultSecret(secretName: str) -> str:
-    return kvSecretClient.get_secret(secretName).value
+    secret = await kvSecretClient.get_secret(secretName)
+    return secret.value
